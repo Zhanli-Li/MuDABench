@@ -87,7 +87,7 @@ Each item in `data/simple.json` or `data/complex.json` is a multi-document analy
 | `final_answer`       | Reference final answer                                               |
 
 > Note: Different questions may use different subsets of `value_*` fields.
-> The public release does not include `openai_vectors_id`.
+
 
 ## File Structure
 
