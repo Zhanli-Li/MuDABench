@@ -1,18 +1,3 @@
----
-pretty_name: MuDABench
-license: apache-2.0
-language:
-- zh
-task_categories:
-- question-answering
-size_categories:
-- n<1K
-tags:
-- question-answering
-- multi-document
-- finance
-- chinese
----
 
 # MuDABench
 
