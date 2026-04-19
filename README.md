@@ -21,7 +21,7 @@
 
 **MuDABench** is a benchmark for **multi-document analytical question answering** over large-scale document collections.
 
-The benchmark focuses on analytical QA over **Chinese A-share market documents**, where each question requires aggregating and reasoning over information from **multiple financial documents**, rather than extracting an answer from a single source.
+The benchmark focuses on analytical QA over **Chinese A-share & US market documents**, where each question requires aggregating and reasoning over information from **multiple financial documents**, rather than extracting an answer from a single source.
 
 MuDABench is designed to evaluate systems that combine:
 
