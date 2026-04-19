@@ -5,7 +5,7 @@
 
 **A benchmark for large-scale multi-document analytical question answering**
 
-[![ACL 2026 Findings](https://img.shields.io/badge/ACL-2026-b31b1b.svg)](https://2026.aclweb.org/)
+[![ACL 2026 Findings](https://img.shields.io/badge/ACL%202026-Findings-b31b1b.svg)](https://2026.aclweb.org/)
 [![Dataset](https://img.shields.io/badge/Hugging%20Face-Dataset-ffcc00?logo=huggingface&logoColor=black)](https://huggingface.co/datasets/Zhanli-Li/MuDABench)
 [![License](https://img.shields.io/github/license/Zhanli-Li/MuDABench)](./LICENSE)
 [![Stars](https://img.shields.io/github/stars/Zhanli-Li/MuDABench?style=social)](https://github.com/Zhanli-Li/MuDABench/stargazers)
@@ -16,6 +16,7 @@
 <p align="center">
   <img src="fig/case.png" alt="MuDABench case illustration" width="85%">
 </p>
+
 
 ## Overview
 
