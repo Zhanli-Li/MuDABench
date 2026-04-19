@@ -1,30 +1,39 @@
-# MuDABench Dataset Release (Paper Supplement)
+---
+pretty_name: MuDABench
+license: apache-2.0
+language:
+- zh
+task_categories:
+- question-answering
+size_categories:
+- n<1K
+tags:
+- question-answering
+- multi-document
+- finance
+- chinese
+---
 
-This folder is a **supplementary release package** for the paper:
+# MuDABench
 
-**Navigating Large-Scale Document Collections: MuDABench for Multi-Document Analytical QA**
+MuDABench is a benchmark for multi-document analytical question answering over large-scale document collections.
 
-It is **not a standalone project**. It provides the paper-aligned dataset artifacts used for benchmark evaluation and reproduction.
+Repository links:
 
-## Relation to the Paper
+- Hugging Face dataset: https://huggingface.co/datasets/Zhanli-Li/MuDABench
+- GitHub repository: https://github.com/Zhanli-Li/MuDABench
 
-MuDABench studies analytical question answering over large, semi-structured multi-document collections.
-This release corresponds to the benchmark setting described in the paper:
+## Overview
 
-- total QA instances: 332
-- split: `simple` and `complex` (166 each)
-- average documents per question: 14.8
-- document count in this release: 589 PDFs
+This release contains:
 
-## What Is Included
+- `data/simple.json`: 166 QA samples with concise final answers.
+- `data/complex.json`: 166 QA samples with more detailed analytical final answers.
+- `data/pdf/`: 589 source PDF files referenced by the samples.
 
-- `data/simple.json`
-- `data/complex.json`
-- `data/pdf/`
+The benchmark is centered on analytical QA over Chinese A-share market documents. Each sample requires aggregating information across multiple documents instead of reading a single source in isolation.
 
-`data/pdf/<id>.pdf` is referenced by `metadata[].id` in `data/simple.json` / `data/complex.json`.
-
-## Data Format (One Question)
+## Data Format
 
 Each item in `data/simple.json` or `data/complex.json` is a multi-document analytical QA sample:
 
@@ -44,60 +53,38 @@ Each item in `data/simple.json` or `data/complex.json` is a multi-document analy
     }
   ],
   "source_answer": "intermediate supporting facts (text)",
-  "final_answer": "reference final answer",
-  "openai_vectors_id": "original evaluation-time vector store id"
+  "final_answer": "reference final answer"
 }
 ```
 
 Notes:
 
 - `metadata` is the document-level structured evidence list for the question.
-- `metadata[].schema` explains the semantics of `value_*` fields in that record.
+- `metadata[].id` matches the PDF filename stem in `data/pdf/`.
+- `metadata[].schema` explains the semantics of the `value_*` fields in that record.
 - Different questions may use different subsets of `value_*` fields.
+- The public release does not include `openai_vectors_id`.
 
-## Split Definition
+## File Structure
 
-- `data/simple.json`: questions requiring relatively lighter filtering/computation/reasoning chains.
-- `data/complex.json`: questions requiring stronger conditional filtering, cross-document aggregation, and multi-step numerical/logical reasoning.
-
-Both files follow the same schema.
-
-## Release Sanitization
-
-For open-source release, we removed:
-
-- `chatdoc_upload_id`
-
-All other fields were preserved to maintain evaluation consistency with the paper setting.
-
-## Size Snapshot (2026-04-19)
-
-- `data/pdf/` file count: 589
-- total PDF size: ~3.87 GB
-- largest PDF: ~56.07 MB
-
-This package is intended for paper reproduction, so repository size is relatively large.
-
-## Scope and Intended Use
-
-This release is intended for:
-
-- reproducing benchmark experiments
-- evaluating multi-document analytical QA systems
-- studying metadata-aware planning, extraction, normalization, and aggregation workflows
-
-It is not intended as a general-purpose financial data product.
-
-## Citation
-
-If you use this dataset package, please cite the MuDABench paper.
-
-```bibtex
-@article{mudabench2026,
-  title={Navigating Large-Scale Document Collections: MuDABench for Multi-Document Analytical QA},
-  author={Li, Zhanli and Cao, Yixuan and Luo, Lvzhou and Luo, Ping},
-  year={2026}
-}
+```text
+MuDABench/
+├── data/
+│   ├── simple.json
+│   ├── complex.json
+│   └── pdf/
+├── LICENSE
+└── README.md
 ```
 
-If your final BibTeX key/venue entry differs, replace this placeholder with the camera-ready citation.
+## Intended Use
+
+MuDABench is intended for:
+
+- evaluating multi-document analytical QA systems
+- testing retrieval plus reasoning pipelines over document collections
+- benchmarking Chinese financial document QA workflows
+
+## License
+
+MuDABench is released under the Apache License 2.0. See `LICENSE` for details.
