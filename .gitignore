@@ -1,1 +1,6 @@
 /data/pdf/
+data/
+
+__pycache__/
+*.py[cod]
+*$py.class

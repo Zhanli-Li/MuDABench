@@ -1,0 +1,2 @@
+# Optional dependencies. The project can run without these if fallback client is used.
+openai>=1.0.0
