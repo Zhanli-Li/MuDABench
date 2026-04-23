@@ -20,7 +20,7 @@
 
 **MuDABench** targets **multi-document analytical question answering** over large financial document collections (Chinese A-share + US market documents).
 
-TThe primary metric promoted by this repository is `final_accuracy` (final answer accuracy), because even if we annotate intermediate atomic facts, the model may still arrive at the correct final answer through other atomic facts or different reasoning paths, which makes it difficult to compare the performance of different question-answering systems.
+The primary metric promoted by this repository is `final_accuracy` (final answer accuracy), because even if we annotate intermediate atomic facts, the model may still arrive at the correct final answer through other atomic facts or different reasoning paths, which makes it difficult to compare the performance of different question-answering systems.
 
 
 ## What Is Included
@@ -305,6 +305,11 @@ If MuDABench is useful for your research, please cite:
   howpublished = {\url{https://github.com/Zhanli-Li/MuDABench}}
 }
 ```
+
+## Ethical Considerations
+The documents in MuDABench are collected from publicly available financial disclosures, ensuring that no private or non-public personal information is compromised. While we utilizes real-world financial figures, it is intended solely for the research.  We used AI for minor language polishing. To ensure accuracy, we work with the community to correct any potential annotation errors in the dataset on an ongoing basis; therefore, the evaluation results in our paper may not be up to date. 
+
+
 
 ## License
 
