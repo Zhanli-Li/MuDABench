@@ -28,6 +28,79 @@ Return JSON only:
     ).strip()
 )
 
+RAG_INFO_DOUBLE_CHECK_CORRECT_PROMPT = PromptTemplate(
+    template=textwrap.dedent(
+        """
+Prompt: Judge — RAG Information Extraction (The correct side)
+
+The user will provide:
+1. Information (`list`) needed to answer the question (total_required = {len_source}):
+{source_answer}
+
+2. Information extracted by the model (each part separated by <next_chunk> is independent of each other):
+{info}
+
+Evaluation Criteria:
+1. If the information extracted by the model contains the key information with true entity from the reference, the correct extraction is added by one.
+2. If the information does not match the entity or does not provide the entity information, it is judged incorrect and the number of correct extractions remains unchanged.
+3. If the key information is missing or does not match the reference, it is judged incorrect and the number of correct extractions remains unchanged.
+4. If the extraction is missing or does not match the reference information, it is judged incorrect and the number of correct extractions remains unchanged.
+5. If the extracted information involves numerical values, the model is considered correct as long as it correctly extracts integer digits and the first decimal place.
+
+Note: If the extraction of the model contains information other than the reference information or uses a different language, this does not affect the determination. Multiple correct extractions of the same information are counted only once.
+
+TASK: Calculate the number of intersections between the information extracted by the model and the information that needs to be extracted.
+
+Return JSON only:
+```json
+{{
+    "correct_extractions": <number of correct entries>,
+    "total_required": {len_source},
+    "explanation": "short explanation"
+}}
+```
+"""
+    ).strip()
+)
+
+RAG_INFO_DOUBLE_CHECK_INCORRECT_PROMPT = PromptTemplate(
+    template=textwrap.dedent(
+        """
+Prompt: Judge — RAG Information Extraction (The incorrect side)
+
+The user will provide:
+1. Information (`list`) needed to answer the question (total_required = {len_source}):
+{source_answer}
+
+2. Information extracted by the model (each part separated by <next_chunk> is independent of each other):
+{info}
+
+Evaluation Criteria:
+1. Treat the reference information list as the gold standard.
+2. For each required entry in the reference list, check all extracted chunks.
+3. If at least one chunk correctly contains the key information with the true entity, this entry is counted as correctly extracted.
+4. If the key information is missing, conflicts with the reference (wrong entity/value), or is otherwise incorrect, this entry is counted as an error.
+5. If the extracted information involves numerical values, the model is considered correct as long as it correctly extracts integer digits and the first decimal place.
+6. Extra information that is not in the reference list, or uses a different language, does not affect the judgment. Only the correctness of the required entries is considered.
+7. Multiple correct extractions of the same reference entry are counted only once.
+8. error_extractions is the number of required entries that are incorrect or missing (i.e., entries in the reference list that do not have a correct extraction).
+
+TASK: You are asked to consider each part of the model output separated by <next_chunk>, as a piece of information extracted by the model, and compute:
+1. error_extractions = number of incorrect or missing entries among the required information.
+2. total_required = {len_source}.
+
+Return JSON only:
+```json
+{{
+    "error_extractions": <number of incorrect or missing entries>,
+    "total_required": {len_source},
+    "explanation": "short explanation"
+}}
+```
+"""
+    ).strip()
+)
+
 ROW_METRIC_ONLY_PROMPT = PromptTemplate(
     template=textwrap.dedent(
         """
