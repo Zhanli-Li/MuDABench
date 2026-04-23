@@ -245,23 +245,120 @@ python eval/evaluate.py \
 
 ## 自定义抽取后端
 
-agent 支持可插拔后端，统一接口：
+MuDABench 支持将默认 ChatDOC 抽取器替换为任意单文档信息抽取 API。
+
+### 1）后端接口约定
+
+你的后端需要暴露以下函数：
 
 ```python
 extract_single_doc(document_id: str, prompt: str) -> str
 ```
 
-通过 `--backend-entrypoint module:function` 注入。
+- `document_id`：从 metadata 自动解析（`chatdoc_upload_id` / `doc_id` / `document_id` / `toBid` / `id`）
+- `prompt`：规划器针对该文档生成的抽取问题
+- 返回值：非空字符串（抽取结果）
+- 失败时：抛出异常（agent 会对每个 doc-plan 自动重试最多 3 次）
 
-示例（仓库内 fake backend）：
+### 2）创建你的 API 适配器
+
+新建文件（示例：`common/custom_api_backend.py`）：
+
+```python
+import json
+import os
+import urllib.request
+
+API_URL = os.getenv("MY_EXTRACT_API_URL", "").rstrip("/")
+API_KEY = os.getenv("MY_EXTRACT_API_KEY", "")
+
+
+def extract_single_doc(document_id: str, prompt: str) -> str:
+    if not API_URL:
+        raise RuntimeError("MY_EXTRACT_API_URL 为空。")
+
+    payload = {
+        "document_id": document_id,
+        "prompt": prompt,
+    }
+    headers = {"Content-Type": "application/json"}
+    if API_KEY:
+        headers["Authorization"] = f"Bearer {API_KEY}"
+
+    req = urllib.request.Request(
+        url=f"{API_URL}/extract",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        raw = resp.read().decode("utf-8")
+
+    data = json.loads(raw)
+    answer = data.get("answer") or data.get("result") or data.get("content")
+    if not isinstance(answer, str) or not answer.strip():
+        raise RuntimeError(f"后端返回格式非法: {data}")
+    return answer.strip()
+```
+
+说明：
+
+- 如果你的 API 字段名不是 `document_id`（例如 `file_id`），请在适配器里自行映射。
+- 遇到 HTTP/业务错误请直接抛异常，不要静默返回空字符串。
+
+### 3）通过 `--backend-entrypoint` 接入（无需改框架主流程）
+
+`--backend-entrypoint` 的格式是 `模块路径:函数名`：
 
 ```bash
 python agent/agent_runner.py \
   --dataset /path/to/dataset.json \
-  --output /path/to/fake_agent_output.json \
-  --sample-size 1 \
-  --backend-entrypoint common.fake_backend:extract_single_doc
+  --output /path/to/custom_agent_output.json \
+  --sample-size 10 \
+  --doc-concurrency 2 \
+  --backend-entrypoint common.custom_api_backend:extract_single_doc
 ```
+
+端到端脚本 `run_benchmark.py` 同样支持该入口：
+
+```bash
+python run_benchmark.py \
+  --dataset /path/to/dataset.json \
+  --output-root /path/to/output_root \
+  --sample-size 10 \
+  --doc-concurrency 2 \
+  --backend-entrypoint common.custom_api_backend:extract_single_doc
+```
+
+### 4）可选：注册短后端名
+
+如果你更想用 `--backend my_api`，可在 `agent/extractors.py` 里注册：
+
+```python
+from common.custom_api_backend import extract_single_doc as my_extract_single_doc
+ExtractorRegistry.register("my_api", my_extract_single_doc)
+```
+
+之后执行：
+
+```bash
+python agent/agent_runner.py ... --backend my_api
+```
+
+### 5）接入验证清单
+
+1. 先做导入冒烟测试：
+   `python -c "from common.custom_api_backend import extract_single_doc; print('ok')"`
+2. 先跑小样本（`--sample-size 1 --doc-concurrency 1`）确认可用性。
+3. 打开 `agent_log_dir` 下的 `run_log.json`，确认 `doc_interactions` 中有正常 `Q/A`。
+4. 再执行评测，确认 `model_answer` 正常生成。
+
+### 6）工程实践建议
+
+- `--doc-concurrency` 决定了并行 API 调用数；若服务有限流，建议从小值开始。
+- agent 本身已带抽取重试；如果你的后端也重试，请控制总超时，避免重试叠加过长。
+- 建议返回“简洁但完整”的事实文本，并保留单位（如 `%`、`USD`、`RMB` 等），有助于后续归一化。
+- 请保持数据集中各文档 ID 稳定；评测阶段依赖这些 ID 做对齐。
 
 ## 评测输出与指标
 

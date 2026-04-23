@@ -248,23 +248,120 @@ Minimal `run_log.json` requirement:
 
 ## Custom Extraction Backend
 
-The agent backend is pluggable with this interface:
+MuDABench can replace the default ChatDOC extractor with any single-document extraction API.
+
+### 1) Backend Contract
+
+Your backend must expose this function:
 
 ```python
 extract_single_doc(document_id: str, prompt: str) -> str
 ```
 
-Use `--backend-entrypoint module:function`.
+- `document_id`: resolved from metadata (`chatdoc_upload_id` / `doc_id` / `document_id` / `toBid` / `id`)
+- `prompt`: a planner-generated extraction question for that document
+- return value: non-empty extracted text (`str`)
+- on failure: raise an exception (the agent retries up to 3 times per doc-plan pair)
 
-Example with built-in fake backend:
+### 2) Create Your API Adapter
+
+Create a new file (example: `common/custom_api_backend.py`):
+
+```python
+import json
+import os
+import urllib.request
+
+API_URL = os.getenv("MY_EXTRACT_API_URL", "").rstrip("/")
+API_KEY = os.getenv("MY_EXTRACT_API_KEY", "")
+
+
+def extract_single_doc(document_id: str, prompt: str) -> str:
+    if not API_URL:
+        raise RuntimeError("MY_EXTRACT_API_URL is empty.")
+
+    payload = {
+        "document_id": document_id,
+        "prompt": prompt,
+    }
+    headers = {"Content-Type": "application/json"}
+    if API_KEY:
+        headers["Authorization"] = f"Bearer {API_KEY}"
+
+    req = urllib.request.Request(
+        url=f"{API_URL}/extract",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        raw = resp.read().decode("utf-8")
+
+    data = json.loads(raw)
+    answer = data.get("answer") or data.get("result") or data.get("content")
+    if not isinstance(answer, str) or not answer.strip():
+        raise RuntimeError(f"invalid backend response: {data}")
+    return answer.strip()
+```
+
+Notes:
+
+- If your API uses a different field name (for example `file_id`), map `document_id` accordingly.
+- Keep exception propagation; do not silently return empty strings on HTTP errors.
+
+### 3) Run with `--backend-entrypoint` (No Framework Code Change Needed)
+
+`--backend-entrypoint` format is `module_path:function_name`:
 
 ```bash
 python agent/agent_runner.py \
   --dataset /path/to/dataset.json \
-  --output /path/to/fake_agent_output.json \
-  --sample-size 1 \
-  --backend-entrypoint common.fake_backend:extract_single_doc
+  --output /path/to/custom_agent_output.json \
+  --sample-size 10 \
+  --doc-concurrency 2 \
+  --backend-entrypoint common.custom_api_backend:extract_single_doc
 ```
+
+End-to-end (`run_benchmark.py`) also supports the same entrypoint:
+
+```bash
+python run_benchmark.py \
+  --dataset /path/to/dataset.json \
+  --output-root /path/to/output_root \
+  --sample-size 10 \
+  --doc-concurrency 2 \
+  --backend-entrypoint common.custom_api_backend:extract_single_doc
+```
+
+### 4) Optional: Register a Short Backend Name
+
+If you prefer `--backend my_api`, register it in `agent/extractors.py`:
+
+```python
+from common.custom_api_backend import extract_single_doc as my_extract_single_doc
+ExtractorRegistry.register("my_api", my_extract_single_doc)
+```
+
+Then run with:
+
+```bash
+python agent/agent_runner.py ... --backend my_api
+```
+
+### 5) Validation Checklist
+
+1. Import smoke test:
+   `python -c "from common.custom_api_backend import extract_single_doc; print('ok')"`
+2. Run one sample first (`--sample-size 1 --doc-concurrency 1`) to verify connectivity.
+3. Check `run_log.json` under `agent_log_dir` and confirm `doc_interactions` contains valid `Q/A`.
+4. Run evaluation and ensure `model_answer` is produced normally.
+
+### 6) Practical Integration Tips
+
+- `--doc-concurrency` controls parallel calls to your API; start small if your service has rate limits.
+- This agent already retries failed extraction calls; if your backend adds retries too, keep total wait time bounded.
+- Return concise but complete factual text (include units such as `%`, `USD`, `RMB`, etc.) to improve downstream normalization.
+- Keep dataset metadata document IDs stable; evaluator alignment depends on those IDs.
 
 ## Evaluation Outputs and Metrics
 
