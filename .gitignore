@@ -1,6 +1,9 @@
 /data/pdf/
-data/
-
+/data/chatdoc_app_cache.json
+/data/easy_all_data_with_independent_openai_vector_store_with_tobid_revise_with_atomic_metadata.json
+/data/hard_all_data_with_independent_openai_vector_store_with_tobid_revise_with_atomic_metadata.json
+run_single_case.sh
+origin_log/
 __pycache__/
 *.py[cod]
 *$py.class

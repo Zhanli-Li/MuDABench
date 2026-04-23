@@ -15,7 +15,13 @@ if PROJECT_ROOT not in sys.path:
 
 from common.openai_async_client import AsyncOpenAI
 
-from prompts.eval_prompts import FINAL_PROMPT, INFO_PROMPT, ROW_METRIC_ONLY_PROMPT
+from prompts.eval_prompts import (
+    FINAL_PROMPT,
+    INFO_PROMPT,
+    RAG_INFO_DOUBLE_CHECK_CORRECT_PROMPT,
+    RAG_INFO_DOUBLE_CHECK_INCORRECT_PROMPT,
+    ROW_METRIC_ONLY_PROMPT,
+)
 from common.json_utils import robust_parse_json
 from common.question_id import resolve_question_id
 
@@ -586,6 +592,84 @@ def normalize_info_dict(parsed: Dict[str, Any], total_required: int) -> Dict[str
     }
 
 
+def normalize_rag_double_check_dict(
+    correct_side_parsed: Dict[str, Any],
+    incorrect_side_parsed: Dict[str, Any],
+    total_required: int,
+) -> Dict[str, Any]:
+    def _to_int(v: Any, default: int = 0) -> int:
+        try:
+            if isinstance(v, bool):
+                return int(v)
+            if v is None or v == "":
+                return default
+            return int(float(v))
+        except Exception:
+            return default
+
+    tr = _to_int(
+        correct_side_parsed.get(
+            "total_required",
+            incorrect_side_parsed.get("total_required", total_required or 1),
+        ),
+        total_required or 1,
+    )
+    tr = max(1, tr)
+
+    correct_from_positive = _to_int(
+        correct_side_parsed.get("correct_extractions", correct_side_parsed.get("correct", 0)),
+        0,
+    )
+    error_from_negative = _to_int(
+        incorrect_side_parsed.get("error_extractions", incorrect_side_parsed.get("errors", 0)),
+        tr,
+    )
+
+    correct_from_positive = min(max(0, correct_from_positive), tr)
+    error_from_negative = min(max(0, error_from_negative), tr)
+    correct_from_negative = tr - error_from_negative
+
+    final_correct = min(correct_from_positive, correct_from_negative)
+    explanations = [
+        str(correct_side_parsed.get("explanation", "")).strip(),
+        str(incorrect_side_parsed.get("explanation", "")).strip(),
+    ]
+    explanation = " | ".join(x for x in explanations if x)
+
+    return {
+        "correct_extractions": final_correct,
+        "total_required": tr,
+        "positive_correct_extractions": correct_from_positive,
+        "negative_error_extractions": error_from_negative,
+        "negative_correct_extractions": correct_from_negative,
+        "double_check_min_correct_extractions": final_correct,
+        "double_check_mode": "rag_positive_negative_min",
+        "explanation": explanation,
+    }
+
+
+def normalize_rag_negative_dict(parsed: Dict[str, Any], total_required: int) -> Dict[str, Any]:
+    def _to_int(v: Any, default: int = 0) -> int:
+        try:
+            if isinstance(v, bool):
+                return int(v)
+            if v is None or v == "":
+                return default
+            return int(float(v))
+        except Exception:
+            return default
+
+    tr = _to_int(parsed.get("total_required", total_required or 1), total_required or 1)
+    tr = max(1, tr)
+    err = _to_int(parsed.get("error_extractions", parsed.get("errors", tr)), tr)
+    err = min(max(0, err), tr)
+    return {
+        "error_extractions": err,
+        "total_required": tr,
+        "explanation": parsed.get("explanation", ""),
+    }
+
+
 def enrich_info_judgment(parsed: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(parsed or {})
 
@@ -874,8 +958,55 @@ async def process_dataset(
                 rag_chunks = out.get("retrieved_chunks") or []
                 if rag_chunks and not isinstance(rag_chunks, list):
                     raise ValueError(f"retrieved_chunks must be a list for question_id={question_id}")
-                rag_text = "\n".join(str(x) for x in rag_chunks)
-                agent_conversation = f"RAG retrieved chunks:\n{rag_text}"
+                rag_text = "\n<next_chunk>\n".join(str(x) for x in rag_chunks)
+                total_required = max(1, len(item.get("source_answer", [])))
+
+                correct_prompt = RAG_INFO_DOUBLE_CHECK_CORRECT_PROMPT.format(
+                    len_source=len(item.get("source_answer", [])),
+                    source_answer=item.get("source_answer"),
+                    info=rag_text or "(empty retrieved chunks)",
+                )
+                incorrect_prompt = RAG_INFO_DOUBLE_CHECK_INCORRECT_PROMPT.format(
+                    len_source=len(item.get("source_answer", [])),
+                    source_answer=item.get("source_answer"),
+                    info=rag_text or "(empty retrieved chunks)",
+                )
+
+                correct_res, incorrect_res = await asyncio.gather(
+                    run_judge_with_rescue(
+                        correct_prompt,
+                        {"correct_extractions": 0, "total_required": total_required},
+                    ),
+                    run_judge_with_rescue(
+                        incorrect_prompt,
+                        {"error_extractions": total_required, "total_required": total_required},
+                    ),
+                )
+
+                parsed_norm = enrich_info_judgment(
+                    normalize_rag_double_check_dict(
+                        correct_res.get("parsed") or {},
+                        incorrect_res.get("parsed") or {},
+                        total_required,
+                    )
+                )
+                info_judgments.append(parsed_norm)
+                log_data[log_key]["judge_info"] = {
+                    "mode": "rag_info_double_check",
+                    "parsed": parsed_norm,
+                    "positive_judge": {
+                        "prompt": correct_prompt,
+                        "raw_response": correct_res.get("raw", ""),
+                        "parsed": normalize_info_dict(correct_res.get("parsed") or {}, total_required),
+                        "meta": correct_res.get("meta", {}),
+                    },
+                    "negative_judge": {
+                        "prompt": incorrect_prompt,
+                        "raw_response": incorrect_res.get("raw", ""),
+                        "parsed": normalize_rag_negative_dict(incorrect_res.get("parsed") or {}, total_required),
+                        "meta": incorrect_res.get("meta", {}),
+                    },
+                }
             else:
                 agent_conversation = (
                     f"JSON data:{out.get('json_data', '')}\n"
@@ -884,22 +1015,22 @@ async def process_dataset(
                     f"Analysis code response:{out.get('code_resp', '')}\n"
                 )
 
-            prompt = INFO_PROMPT.format(
-                len_source=len(item.get("source_answer", [])),
-                source_answer=item.get("source_answer"),
-                agent_conversation=agent_conversation,
-            )
-            total_required = max(1, len(item.get("source_answer", [])))
-            res = await run_judge_with_rescue(prompt, {"correct_extractions": 0, "total_required": total_required})
-            parsed_norm = enrich_info_judgment(normalize_info_dict(res.get("parsed") or {}, total_required))
-            info_judgments.append(parsed_norm)
-            log_data[log_key]["judge_info"] = {
-                "mode": "legacy_question_wise" if eval_mode == "agent" else "rag_info_prompt",
-                "prompt": prompt,
-                "raw_response": res.get("raw", ""),
-                "parsed": parsed_norm,
-                "meta": res.get("meta", {}),
-            }
+                prompt = INFO_PROMPT.format(
+                    len_source=len(item.get("source_answer", [])),
+                    source_answer=item.get("source_answer"),
+                    agent_conversation=agent_conversation,
+                )
+                total_required = max(1, len(item.get("source_answer", [])))
+                res = await run_judge_with_rescue(prompt, {"correct_extractions": 0, "total_required": total_required})
+                parsed_norm = enrich_info_judgment(normalize_info_dict(res.get("parsed") or {}, total_required))
+                info_judgments.append(parsed_norm)
+                log_data[log_key]["judge_info"] = {
+                    "mode": "legacy_question_wise" if eval_mode == "agent" else "rag_info_prompt",
+                    "prompt": prompt,
+                    "raw_response": res.get("raw", ""),
+                    "parsed": parsed_norm,
+                    "meta": res.get("meta", {}),
+                }
 
         fp = FINAL_PROMPT.format(
             question=question,
@@ -1005,6 +1136,8 @@ async def cli_main() -> None:
     )
 
     summary = {
+        "info_accuracy": results["row_accuracy"],
+        "info": f"{results['row_correct_count']}/{results['row_total']}",
         "row_accuracy": results["row_accuracy"],
         "row": f"{results['row_correct_count']}/{results['row_total']}",
         "column_accuracy": results["column_accuracy"],
@@ -1020,6 +1153,7 @@ async def cli_main() -> None:
     _dump_json(os.path.join(args.output_dir, "eval_summary.json"), summary)
     _dump_json(os.path.join(args.output_dir, "eval_log.json"), results["log_data"])
 
+    print(f"info accuracy: {summary['info_accuracy']:.4f} ({summary['info']})")
     print(f"row accuracy: {summary['row_accuracy']:.4f} ({summary['row']})")
     print(f"column accuracy: {summary['column_accuracy']:.4f} ({summary['column']})")
     print(f"cell accuracy: {summary['cell_accuracy']:.4f} ({summary['cell']})")
