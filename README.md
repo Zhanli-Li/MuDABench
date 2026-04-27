@@ -395,12 +395,14 @@ Release note on fairness:
 If MuDABench is useful for your research, please cite:
 
 ```bibtex
-@misc{mudabench2026,
-  title        = {MuDABench: A Benchmark for Large-Scale Multi-Document Analysis},
-  author       = {Li, Zhanli and others},
-  year         = {2026},
-  note         = {ACL 2026},
-  howpublished = {\url{https://github.com/Zhanli-Li/MuDABench}}
+@misc{li2026navigatinglargescaledocumentcollections,
+      title={Navigating Large-Scale Document Collections: MuDABench for Multi-Document Analytical QA}, 
+      author={Zhanli Li and Yixuan Cao and Lvzhou Luo and Ping Luo},
+      year={2026},
+      eprint={2604.22239},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2604.22239}, 
 }
 ```
 
