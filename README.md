@@ -6,6 +6,7 @@
 
 [简体中文](./README_zh.md)
 
+[![arXiv](https://img.shields.io/badge/arXiv-2604.22239-b31b1b.svg)](https://arxiv.org/abs/2604.22239)
 [![ACL 2026 Findings](https://img.shields.io/badge/ACL%202026-Findings-b31b1b.svg)](https://2026.aclweb.org/)
 [![Dataset](https://img.shields.io/badge/Hugging%20Face-Dataset-ffcc00?logo=huggingface&logoColor=black)](https://huggingface.co/datasets/Zhanli-Li/MuDABench)
 [![License](https://img.shields.io/github/license/Zhanli-Li/MuDABench)](./LICENSE)
